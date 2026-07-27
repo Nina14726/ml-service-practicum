@@ -1,8 +1,8 @@
 """Object model for an ML-service personal account.
 
-This module contains only the domain model required by assignment 1.
-It intentionally does not include a database, REST API, Telegram bot,
-RabbitMQ, web interface, Docker configuration, or monitoring.
+The module contains the domain model required by practical assignment 1.
+It deliberately does not include persistence, REST, Telegram, RabbitMQ,
+web UI, Docker, tests, or monitoring because those belong to later stages.
 """
 
 from __future__ import annotations
@@ -10,8 +10,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, TypeAlias
 from uuid import UUID, uuid4
+
+
+DataRow: TypeAlias = dict[str, Any]
+PredictionValue: TypeAlias = int | float | str
 
 
 class UserRole(str, Enum):
@@ -38,29 +42,26 @@ class TransactionType(str, Enum):
 
 
 class PredictionResult:
-    """Result of processing one ML task.
-
-    Public fields:
-        predictions: model predictions for valid input rows.
-        invalid_data: rows rejected during validation.
-        charged_credits: credits charged only after successful prediction.
-        created_at: result creation time.
-    """
+    """Result of processing one ML task."""
 
     def __init__(
         self,
-        predictions: list[Any],
-        invalid_data: list[Any],
+        predictions: list[PredictionValue],
+        invalid_data: list[DataRow],
         charged_credits: float,
     ) -> None:
-        self.predictions: list[Any] = predictions
-        self.invalid_data: list[Any] = invalid_data
+        self.predictions: list[PredictionValue] = predictions
+        self.invalid_data: list[DataRow] = invalid_data
         self.charged_credits: float = charged_credits
         self.created_at: datetime = datetime.now(timezone.utc)
 
 
 class MLRequestHistory:
-    """History of a user's ML requests."""
+    """History of a user's ML requests.
+
+    Access modifiers:
+        __tasks: private.
+    """
 
     def __init__(self) -> None:
         self.__tasks: list[MLTask] = []
@@ -83,8 +84,8 @@ class User:
     """User of the ML service.
 
     Access modifiers:
-        id, email: public.
-        _role, _request_history: protected.
+        id, email: public;
+        _role, _request_history: protected;
         __password_hash, __balance, __transactions: private.
     """
 
@@ -110,7 +111,7 @@ class User:
 
     @property
     def balance(self) -> float:
-        """Return the current balance without exposing direct modification."""
+        """Return the balance without allowing direct modification."""
         return self.__balance
 
     def authenticate(self, password_hash: str) -> bool:
@@ -120,6 +121,16 @@ class User:
     def can_afford(self, amount: float) -> bool:
         """Check whether the balance is sufficient."""
         return amount >= 0 and self.__balance >= amount
+
+    def top_up_balance(self, amount: float) -> CreditTransaction:
+        """Top up the user's balance and record the transaction.
+
+        The course does not require real acquiring. A later interface may call
+        this method directly or route it through administrator approval.
+        """
+        transaction = CreditTransaction(user=self, amount=amount)
+        transaction.apply()
+        return transaction
 
     def get_request_history(self) -> list[MLTask]:
         """Return the user's ML request history."""
@@ -159,12 +170,8 @@ class Admin(User):
             role=UserRole.ADMIN,
         )
 
-    def top_up_user_balance(
-        self,
-        user: User,
-        amount: float,
-    ) -> CreditTransaction:
-        """Approve a user's balance top-up."""
+    def top_up_user_balance(self, user: User, amount: float) -> CreditTransaction:
+        """Approve and perform a user's balance top-up."""
         transaction = CreditTransaction(user=user, amount=amount)
         transaction.apply()
         return transaction
@@ -178,14 +185,7 @@ class Admin(User):
 
 
 class MLModel(ABC):
-    """Base class for an ML model available in the service.
-
-    Public fields:
-        id: model identifier.
-        name: model name.
-        description: model purpose.
-        prediction_cost: cost of one prediction in credits.
-    """
+    """Abstract base class for an ML model available in the service."""
 
     def __init__(
         self,
@@ -205,13 +205,13 @@ class MLModel(ABC):
     @abstractmethod
     def validate_data(
         self,
-        input_data: list[Any],
-    ) -> tuple[list[Any], list[Any]]:
+        input_data: list[DataRow],
+    ) -> tuple[list[DataRow], list[DataRow]]:
         """Return valid and invalid input rows."""
         raise NotImplementedError
 
     @abstractmethod
-    def predict(self, valid_data: list[Any]) -> list[Any]:
+    def predict(self, valid_data: list[DataRow]) -> list[PredictionValue]:
         """Return predictions for valid input rows."""
         raise NotImplementedError
 
@@ -222,22 +222,61 @@ class MLModel(ABC):
         return self.prediction_cost * predictions_count
 
 
-class MLTask:
-    """A request to run an ML model for a user.
+class BinaryClassificationModel(MLModel):
+    """Concrete ML-model example demonstrating inheritance and polymorphism.
 
-    Public fields:
-        id, input_data, status, user, model, result, created_at.
+    A row is valid when it contains a numeric value in ``feature_name``.
+    Prediction is 1 when the value is at least ``threshold``, otherwise 0.
     """
+
+    def __init__(
+        self,
+        model_id: int,
+        name: str,
+        description: str,
+        prediction_cost: float,
+        feature_name: str,
+        threshold: float,
+    ) -> None:
+        super().__init__(model_id, name, description, prediction_cost)
+        self.feature_name: str = feature_name
+        self.threshold: float = threshold
+
+    def validate_data(
+        self,
+        input_data: list[DataRow],
+    ) -> tuple[list[DataRow], list[DataRow]]:
+        valid_data: list[DataRow] = []
+        invalid_data: list[DataRow] = []
+
+        for row in input_data:
+            value = row.get(self.feature_name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                valid_data.append(row)
+            else:
+                invalid_data.append(row)
+
+        return valid_data, invalid_data
+
+    def predict(self, valid_data: list[DataRow]) -> list[PredictionValue]:
+        return [
+            int(float(row[self.feature_name]) >= self.threshold)
+            for row in valid_data
+        ]
+
+
+class MLTask:
+    """A request to run an ML model for a user."""
 
     def __init__(
         self,
         user: User,
         model: MLModel,
-        input_data: list[Any],
+        input_data: list[DataRow],
         task_id: UUID | None = None,
     ) -> None:
         self.id: UUID = task_id or uuid4()
-        self.input_data: list[Any] = input_data
+        self.input_data: list[DataRow] = input_data
         self.status: TaskStatus = TaskStatus.CREATED
         self.user: User = user
         self.model: MLModel = model
@@ -245,7 +284,7 @@ class MLTask:
         self.created_at: datetime = datetime.now(timezone.utc)
 
     def run(self) -> PredictionResult:
-        """Validate data, run prediction, and charge credits after success."""
+        """Validate data, predict valid rows, and charge only after success."""
         if self.status is not TaskStatus.CREATED:
             raise RuntimeError("Only a newly created task can be started")
 
@@ -283,10 +322,10 @@ class MLTask:
 
 
 class Transaction(ABC):
-    """Base class for a balance transaction.
+    """Abstract base class for a balance transaction.
 
     Access modifiers:
-        id, created_at, user, related_task: public.
+        id, created_at, user, related_task: public;
         _amount: protected.
     """
 
@@ -324,7 +363,7 @@ class Transaction(ABC):
 
 
 class CreditTransaction(Transaction):
-    """Polymorphic transaction that increases a user's balance."""
+    """Transaction that increases a user's balance."""
 
     @property
     def transaction_type(self) -> TransactionType:
@@ -336,7 +375,7 @@ class CreditTransaction(Transaction):
 
 
 class DebitTransaction(Transaction):
-    """Polymorphic transaction that decreases a user's balance."""
+    """Transaction that decreases a user's balance."""
 
     @property
     def transaction_type(self) -> TransactionType:
