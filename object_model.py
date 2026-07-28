@@ -80,13 +80,56 @@ class MLRequestHistory:
         return [task for task in self.__tasks if task.status == status]
 
 
+class Balance:
+    """Balance and transaction history of a service account.
+
+    Access modifiers:
+        __amount, __transactions: private.
+    """
+
+    def __init__(self) -> None:
+        self.__amount: float = 0.0
+        self.__transactions: list[Transaction] = []
+
+    @property
+    def amount(self) -> float:
+        """Return the current amount without allowing direct modification."""
+        return self.__amount
+
+    def can_afford(self, amount: float) -> bool:
+        """Check whether the balance is sufficient."""
+        return amount >= 0 and self.__amount >= amount
+
+    def increase(self, amount: float) -> None:
+        """Increase the balance by a positive amount."""
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+        self.__amount += amount
+
+    def decrease(self, amount: float) -> None:
+        """Decrease the balance after checking available funds."""
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+        if not self.can_afford(amount):
+            raise ValueError("Insufficient balance")
+        self.__amount -= amount
+
+    def add_transaction(self, transaction: Transaction) -> None:
+        """Record a balance transaction."""
+        self.__transactions.append(transaction)
+
+    def get_transactions(self) -> list[Transaction]:
+        """Return a copy of the transaction history."""
+        return list(self.__transactions)
+
+
 class User:
     """User of the ML service.
 
     Access modifiers:
         id, email: public;
-        _role, _request_history: protected;
-        __password_hash, __balance, __transactions: private.
+        _role, _request_history, _balance: protected;
+        __password_hash: private.
     """
 
     def __init__(
@@ -100,9 +143,8 @@ class User:
         self.email: str = email
         self._role: UserRole = role
         self._request_history: MLRequestHistory = MLRequestHistory()
+        self._balance: Balance = Balance()
         self.__password_hash: str = password_hash
-        self.__balance: float = 0.0
-        self.__transactions: list[Transaction] = []
 
     @property
     def role(self) -> UserRole:
@@ -111,52 +153,24 @@ class User:
 
     @property
     def balance(self) -> float:
-        """Return the balance without allowing direct modification."""
-        return self.__balance
+        """Return the current balance."""
+        return self._balance.amount
 
     def authenticate(self, password_hash: str) -> bool:
         """Check authorization data."""
         return self.__password_hash == password_hash
 
     def can_afford(self, amount: float) -> bool:
-        """Check whether the balance is sufficient."""
-        return amount >= 0 and self.__balance >= amount
-
-    def top_up_balance(self, amount: float) -> CreditTransaction:
-        """Top up the user's balance and record the transaction.
-
-        The course does not require real acquiring. A later interface may call
-        this method directly or route it through administrator approval.
-        """
-        transaction = CreditTransaction(user=self, amount=amount)
-        transaction.apply()
-        return transaction
+        """Check whether the account balance is sufficient."""
+        return self._balance.can_afford(amount)
 
     def get_request_history(self) -> list[MLTask]:
         """Return the user's ML request history."""
         return self._request_history.get_all()
 
     def get_transactions(self) -> list[Transaction]:
-        """Return a copy of the user's transaction history."""
-        return list(self.__transactions)
-
-    def _increase_balance(self, amount: float) -> None:
-        """Protected balance operation used by credit transactions."""
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
-        self.__balance += amount
-
-    def _decrease_balance(self, amount: float) -> None:
-        """Protected balance operation used by debit transactions."""
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
-        if not self.can_afford(amount):
-            raise ValueError("Insufficient balance")
-        self.__balance -= amount
-
-    def _add_transaction(self, transaction: Transaction) -> None:
-        """Protected method for recording a balance transaction."""
-        self.__transactions.append(transaction)
+        """Return the user's transaction history."""
+        return self._balance.get_transactions()
 
 
 class Admin(User):
@@ -370,8 +384,8 @@ class CreditTransaction(Transaction):
         return TransactionType.CREDIT
 
     def apply(self) -> None:
-        self.user._increase_balance(self.amount)
-        self.user._add_transaction(self)
+        self.user._balance.increase(self.amount)
+        self.user._balance.add_transaction(self)
 
 
 class DebitTransaction(Transaction):
@@ -382,5 +396,5 @@ class DebitTransaction(Transaction):
         return TransactionType.DEBIT
 
     def apply(self) -> None:
-        self.user._decrease_balance(self.amount)
-        self.user._add_transaction(self)
+        self.user._balance.decrease(self.amount)
+        self.user._balance.add_transaction(self)
