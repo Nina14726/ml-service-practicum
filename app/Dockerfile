@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY src ./src
+COPY tests ./tests
 
 EXPOSE 8000
 
