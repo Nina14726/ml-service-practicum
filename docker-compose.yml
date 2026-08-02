@@ -1,0 +1,42 @@
+services:
+  app:
+    build:
+      context: ./app
+    env_file:
+      - ./app/.env
+    volumes:
+      - ./app/src:/app/src
+    expose:
+      - "8000"
+    depends_on:
+      - database
+      - rabbitmq
+
+  web-proxy:
+    build:
+      context: ./web-proxy
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: on-failure
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_volume:/var/lib/rabbitmq
+
+  database:
+    image: postgres:16-alpine
+    env_file:
+      - ./app/.env
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+
+volumes:
+  postgres_volume:
+  rabbitmq_volume:
