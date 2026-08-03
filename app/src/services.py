@@ -19,6 +19,9 @@ def create_user(
     role: str = "user",
     initial_balance: Decimal = Decimal("0.00"),
 ) -> UserORM:
+    if get_user_by_email(session, email) is not None:
+        raise ValueError("User already exists")
+
     user = UserORM(email=email, password_hash=password_hash, role=role)
     user.balance = BalanceORM(amount=initial_balance)
     session.add(user)
@@ -29,6 +32,13 @@ def create_user(
 
 def get_user_by_email(session: Session, email: str) -> UserORM | None:
     return session.scalar(select(UserORM).where(UserORM.email == email))
+
+
+def authenticate_user(session: Session, email: str, password: str) -> UserORM:
+    user = get_user_by_email(session, email)
+    if user is None or user.password_hash != password:
+        raise ValueError("Invalid email or password")
+    return user
 
 
 def top_up_balance(session: Session, user_id: int, amount: Decimal) -> TransactionORM:
@@ -113,6 +123,7 @@ def create_ml_request(
             select(BalanceORM).where(BalanceORM.user_id == user_id).with_for_update()
         )
         if balance is None:
+            session.rollback()
             raise ValueError("Balance not found")
         if balance.amount < charge:
             session.rollback()
@@ -131,6 +142,38 @@ def create_ml_request(
     session.commit()
     session.refresh(request)
     return request
+
+
+def run_prediction(
+    session: Session,
+    user_id: int,
+    model_id: int,
+    input_data: list[dict],
+) -> MLRequestORM:
+    if not input_data:
+        raise ValueError("Prediction data must not be empty")
+
+    predictions: list[int] = []
+    invalid_data: list[dict] = []
+
+    for row in input_data:
+        value = row.get("value")
+        if not isinstance(value, (int, float)):
+            invalid_data.append(row)
+            continue
+        predictions.append(int(value >= 0.5))
+
+    if not predictions:
+        raise ValueError("No valid rows for prediction")
+
+    return create_ml_request(
+        session=session,
+        user_id=user_id,
+        model_id=model_id,
+        input_data=input_data,
+        predictions=predictions,
+        invalid_data=invalid_data,
+    )
 
 
 def get_transaction_history(session: Session, user_id: int) -> list[TransactionORM]:
