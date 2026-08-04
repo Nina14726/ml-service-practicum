@@ -12,6 +12,34 @@ services:
       - database
       - rabbitmq
 
+  worker-1:
+    build:
+      context: ./app
+    command: python -m src.worker
+    env_file:
+      - ./app/.env
+    environment:
+      WORKER_ID: worker-1
+    volumes:
+      - ./app/src:/app/src
+    depends_on:
+      - database
+      - rabbitmq
+
+  worker-2:
+    build:
+      context: ./app
+    command: python -m src.worker
+    env_file:
+      - ./app/.env
+    environment:
+      WORKER_ID: worker-2
+    volumes:
+      - ./app/src:/app/src
+    depends_on:
+      - database
+      - rabbitmq
+
   web-proxy:
     build:
       context: ./web-proxy
