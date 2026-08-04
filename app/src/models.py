@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String
+from sqlalchemy import DateTime, Float, ForeignKey, JSON, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -95,3 +95,17 @@ class TransactionORM(Base):
 
     user: Mapped[UserORM] = relationship(back_populates="transactions")
     request: Mapped[MLRequestORM | None] = relationship(back_populates="transactions")
+
+
+class PredictionTaskORM(Base):
+    __tablename__ = "prediction_tasks"
+
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    features: Mapped[dict] = mapped_column(JSON, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
