@@ -50,6 +50,30 @@ class PredictionResponse(BaseModel):
     charged_credits: Decimal
 
 
+class AsyncPredictionRequest(BaseModel):
+    features: dict[str, float]
+    model: str = Field(min_length=1)
+
+
+class AsyncPredictionAccepted(BaseModel):
+    task_id: str
+    status: str
+
+
+class AsyncPredictionResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: str
+    features: dict
+    model: str
+    prediction: float | None
+    worker_id: str | None
+    status: str
+    error: str | None
+    created_at: datetime
+    processed_at: datetime | None
+
+
 class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
