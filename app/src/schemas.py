@@ -51,7 +51,7 @@ class PredictionResponse(BaseModel):
 
 
 class AsyncPredictionRequest(BaseModel):
-    features: dict[str, float]
+    features: dict[str, float] = Field(min_length=1)
     model: str = Field(min_length=1)
 
 
@@ -66,6 +66,7 @@ class AsyncPredictionResult(BaseModel):
     task_id: str
     features: dict
     model: str
+    charged_credits: Decimal
     prediction: float | None
     worker_id: str | None
     status: str
