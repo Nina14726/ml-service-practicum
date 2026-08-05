@@ -4,11 +4,12 @@ from secrets import token_urlsafe
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.database import SessionLocal
 from src.init_db import init_database
-from src.models import PredictionTaskORM, UserORM
+from src.models import BalanceORM, MLModelORM, PredictionTaskORM, TransactionORM, UserORM
 from src.rabbitmq import publish_task
 from src.schemas import (
     AsyncPredictionAccepted,
@@ -130,17 +131,43 @@ def top_up(payload: TopUpRequest, user: UserORM = Depends(get_current_user), ses
 
 
 @app.post("/predict", response_model=AsyncPredictionAccepted, status_code=202)
-def enqueue_prediction(payload: AsyncPredictionRequest, session: Session = Depends(get_session)):
+def enqueue_prediction(
+    payload: AsyncPredictionRequest,
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    model = session.scalar(select(MLModelORM).where(MLModelORM.name == payload.model))
+    if model is None:
+        raise HTTPException(status_code=404, detail="ML model not found")
+
+    balance = session.scalar(
+        select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
+    )
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Balance not found")
+    if balance.amount < model.prediction_cost:
+        raise HTTPException(status_code=402, detail="Insufficient balance")
+
     task_id = str(uuid4())
     created_at = datetime.now(timezone.utc)
+    balance.amount -= model.prediction_cost
     task = PredictionTaskORM(
         task_id=task_id,
+        user_id=user.id,
         features=payload.features,
         model=payload.model,
+        charged_credits=model.prediction_cost,
         status="queued",
         created_at=created_at,
     )
     session.add(task)
+    session.add(
+        TransactionORM(
+            user_id=user.id,
+            transaction_type="debit",
+            amount=model.prediction_cost,
+        )
+    )
     session.commit()
 
     message = {
@@ -152,8 +179,21 @@ def enqueue_prediction(payload: AsyncPredictionRequest, session: Session = Depen
     try:
         publish_task(message)
     except Exception as error:
+        balance = session.scalar(
+            select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
+        )
+        if balance is not None:
+            balance.amount += model.prediction_cost
+            session.add(
+                TransactionORM(
+                    user_id=user.id,
+                    transaction_type="refund",
+                    amount=model.prediction_cost,
+                )
+            )
         task.status = "failed"
         task.error = f"publish error: {error}"
+        task.processed_at = datetime.now(timezone.utc)
         session.commit()
         raise HTTPException(status_code=503, detail="RabbitMQ is unavailable") from error
 
