@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String
+from sqlalchemy import DateTime, Float, ForeignKey, JSON, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -56,21 +56,15 @@ class MLModelORM(Base):
 class MLRequestORM(Base):
     __tablename__ = "ml_requests"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     model_id: Mapped[int] = mapped_column(ForeignKey("ml_models.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="created", nullable=False)
     input_data: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     predictions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     invalid_data: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
-    charged_credits: Mapped[Decimal] = mapped_column(
-        Numeric(12, 2), default=Decimal("0.00"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    charged_credits: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped[UserORM] = relationship(back_populates="requests")
     model: Mapped[MLModelORM] = relationship(back_populates="requests")
@@ -80,18 +74,28 @@ class MLRequestORM(Base):
 class TransactionORM(Base):
     __tablename__ = "transactions"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    request_id: Mapped[str | None] = mapped_column(
-        ForeignKey("ml_requests.id"), nullable=True
-    )
+    request_id: Mapped[str | None] = mapped_column(ForeignKey("ml_requests.id"), nullable=True)
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped[UserORM] = relationship(back_populates="transactions")
     request: Mapped[MLRequestORM | None] = relationship(back_populates="transactions")
+
+
+class PredictionTaskORM(Base):
+    __tablename__ = "prediction_tasks"
+
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    features: Mapped[dict] = mapped_column(JSON, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    charged_credits: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
