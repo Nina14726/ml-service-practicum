@@ -4,6 +4,7 @@ from secrets import token_urlsafe
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -34,6 +35,7 @@ from src.services import (
     run_prediction,
     top_up_balance,
 )
+from src.web import router as web_router
 
 TOKENS: dict[str, int] = {}
 
@@ -45,6 +47,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ML Service", lifespan=lifespan)
+app.include_router(web_router)
 
 
 def get_session():
@@ -81,9 +84,9 @@ def service_error(error: ValueError) -> HTTPException:
     return HTTPException(status_code=code, detail=message)
 
 
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"message": "ML service is running"}
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/web")
 
 
 @app.get("/health")
@@ -121,7 +124,11 @@ def get_balance(user: UserORM = Depends(get_current_user)):
 
 
 @app.post("/balance/top-up", response_model=BalanceResponse)
-def top_up(payload: TopUpRequest, user: UserORM = Depends(get_current_user), session: Session = Depends(get_session)):
+def top_up(
+    payload: TopUpRequest,
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     try:
         top_up_balance(session, user.id, payload.amount)
         session.refresh(user.balance)
@@ -201,15 +208,36 @@ def enqueue_prediction(
 
 
 @app.get("/predict/{task_id}", response_model=AsyncPredictionResult)
-def get_prediction_result(task_id: str, session: Session = Depends(get_session)):
+def get_prediction_result(
+    task_id: str,
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     task = session.get(PredictionTaskORM, task_id)
-    if task is None:
+    if task is None or task.user_id != user.id:
         raise HTTPException(status_code=404, detail="Prediction task not found")
     return task
 
 
+@app.get("/web/api/tasks", response_model=list[AsyncPredictionResult])
+def web_task_history(
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    statement = (
+        select(PredictionTaskORM)
+        .where(PredictionTaskORM.user_id == user.id)
+        .order_by(PredictionTaskORM.created_at.desc())
+    )
+    return list(session.scalars(statement))
+
+
 @app.post("/predict/sync", response_model=PredictionResponse)
-def predict_sync(payload: PredictionRequest, user: UserORM = Depends(get_current_user), session: Session = Depends(get_session)):
+def predict_sync(
+    payload: PredictionRequest,
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     try:
         request = run_prediction(session, user.id, payload.model_id, payload.data)
     except ValueError as error:
@@ -224,10 +252,16 @@ def predict_sync(payload: PredictionRequest, user: UserORM = Depends(get_current
 
 
 @app.get("/history/requests", response_model=list[RequestHistoryResponse])
-def request_history(user: UserORM = Depends(get_current_user), session: Session = Depends(get_session)):
+def request_history(
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     return get_request_history(session, user.id)
 
 
 @app.get("/history/transactions", response_model=list[TransactionResponse])
-def transaction_history(user: UserORM = Depends(get_current_user), session: Session = Depends(get_session)):
+def transaction_history(
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     return get_transaction_history(session, user.id)
