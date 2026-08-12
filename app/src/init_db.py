@@ -50,6 +50,11 @@ def initialize_demo_data(session: Session) -> None:
             "description": "RabbitMQ demo model that sums numeric features",
             "prediction_cost": Decimal("2.00"),
         },
+        {
+            "name": "video_analysis",
+            "description": "Video analysis with director breakdown and reproduction prompt",
+            "prediction_cost": Decimal("5.00"),
+        },
     ]
 
     for data in demo_models:
