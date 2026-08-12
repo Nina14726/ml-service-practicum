@@ -26,6 +26,7 @@ from src.schemas import (
     TopUpRequest,
     TransactionResponse,
     UserResponse,
+    VideoAnalysisRequest,
 )
 from src.services import (
     authenticate_user,
@@ -82,6 +83,83 @@ def service_error(error: ValueError) -> HTTPException:
     else:
         code = status.HTTP_400_BAD_REQUEST
     return HTTPException(status_code=code, detail=message)
+
+
+def enqueue_task(
+    *,
+    session: Session,
+    user: UserORM,
+    model_name: str,
+    features: dict,
+    source_name: str | None = None,
+    source_size: int | None = None,
+    source_duration: float | None = None,
+) -> AsyncPredictionAccepted:
+    model = session.scalar(select(MLModelORM).where(MLModelORM.name == model_name))
+    if model is None:
+        raise HTTPException(status_code=404, detail="ML model not found")
+
+    balance = session.scalar(
+        select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
+    )
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Balance not found")
+    if balance.amount < model.prediction_cost:
+        raise HTTPException(status_code=402, detail="Insufficient balance")
+
+    task_id = str(uuid4())
+    created_at = datetime.now(timezone.utc)
+    balance.amount -= model.prediction_cost
+    task = PredictionTaskORM(
+        task_id=task_id,
+        user_id=user.id,
+        features=features,
+        model=model_name,
+        charged_credits=model.prediction_cost,
+        source_name=source_name,
+        source_size=source_size,
+        source_duration=source_duration,
+        status="queued",
+        created_at=created_at,
+    )
+    session.add(task)
+    session.add(
+        TransactionORM(
+            user_id=user.id,
+            transaction_type="debit",
+            amount=model.prediction_cost,
+        )
+    )
+    session.commit()
+
+    message = {
+        "task_id": task_id,
+        "features": features,
+        "model": model_name,
+        "timestamp": created_at.isoformat(),
+    }
+    try:
+        publish_task(message)
+    except Exception as error:
+        balance = session.scalar(
+            select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
+        )
+        if balance is not None:
+            balance.amount += model.prediction_cost
+            session.add(
+                TransactionORM(
+                    user_id=user.id,
+                    transaction_type="refund",
+                    amount=model.prediction_cost,
+                )
+            )
+        task.status = "failed"
+        task.error = f"publish error: {error}"
+        task.processed_at = datetime.now(timezone.utc)
+        session.commit()
+        raise HTTPException(status_code=503, detail="RabbitMQ is unavailable") from error
+
+    return AsyncPredictionAccepted(task_id=task_id, status="queued")
 
 
 @app.get("/", include_in_schema=False)
@@ -143,68 +221,33 @@ def enqueue_prediction(
     user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    model = session.scalar(select(MLModelORM).where(MLModelORM.name == payload.model))
-    if model is None:
-        raise HTTPException(status_code=404, detail="ML model not found")
-
-    balance = session.scalar(
-        select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
-    )
-    if balance is None:
-        raise HTTPException(status_code=404, detail="Balance not found")
-    if balance.amount < model.prediction_cost:
-        raise HTTPException(status_code=402, detail="Insufficient balance")
-
-    task_id = str(uuid4())
-    created_at = datetime.now(timezone.utc)
-    balance.amount -= model.prediction_cost
-    task = PredictionTaskORM(
-        task_id=task_id,
-        user_id=user.id,
+    return enqueue_task(
+        session=session,
+        user=user,
+        model_name=payload.model,
         features=payload.features,
-        model=payload.model,
-        charged_credits=model.prediction_cost,
-        status="queued",
-        created_at=created_at,
     )
-    session.add(task)
-    session.add(
-        TransactionORM(
-            user_id=user.id,
-            transaction_type="debit",
-            amount=model.prediction_cost,
-        )
+
+
+@app.post("/video-analysis", response_model=AsyncPredictionAccepted, status_code=202)
+def enqueue_video_analysis(
+    payload: VideoAnalysisRequest,
+    user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    suffix = payload.filename.rsplit(".", 1)[-1].lower() if "." in payload.filename else ""
+    if suffix not in {"mp4", "mov", "webm"}:
+        raise HTTPException(status_code=400, detail="Supported video formats: MP4, MOV, WebM")
+
+    return enqueue_task(
+        session=session,
+        user=user,
+        model_name="video_analysis",
+        features={"duration_seconds": payload.duration_seconds},
+        source_name=payload.filename,
+        source_size=payload.size_bytes,
+        source_duration=payload.duration_seconds,
     )
-    session.commit()
-
-    message = {
-        "task_id": task_id,
-        "features": payload.features,
-        "model": payload.model,
-        "timestamp": created_at.isoformat(),
-    }
-    try:
-        publish_task(message)
-    except Exception as error:
-        balance = session.scalar(
-            select(BalanceORM).where(BalanceORM.user_id == user.id).with_for_update()
-        )
-        if balance is not None:
-            balance.amount += model.prediction_cost
-            session.add(
-                TransactionORM(
-                    user_id=user.id,
-                    transaction_type="refund",
-                    amount=model.prediction_cost,
-                )
-            )
-        task.status = "failed"
-        task.error = f"publish error: {error}"
-        task.processed_at = datetime.now(timezone.utc)
-        session.commit()
-        raise HTTPException(status_code=503, detail="RabbitMQ is unavailable") from error
-
-    return AsyncPredictionAccepted(task_id=task_id, status="queued")
 
 
 @app.get("/predict/{task_id}", response_model=AsyncPredictionResult)
