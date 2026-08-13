@@ -1,15 +1,18 @@
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pika
 from sqlalchemy import select
 
 from src.database import SessionLocal, create_tables, wait_for_database
+from src.gemini_analysis import analyze_video
 from src.models import BalanceORM, PredictionTaskORM, TransactionORM
 from src.rabbitmq import QUEUE_NAME, connect_to_rabbitmq
 
 WORKER_ID = os.getenv("WORKER_ID", "worker-unknown")
+UPLOAD_DIR = Path(os.getenv("VIDEO_UPLOAD_DIR", "/app/uploads"))
 
 
 def validate_features(features: object) -> dict[str, float]:
@@ -30,105 +33,27 @@ def validate_features(features: object) -> dict[str, float]:
     return result
 
 
-def video_analysis_result() -> dict:
-    return {
-        "analysis": {
-            "core_idea_dna": {
-                "logline": "Короткий визуальный ролик строится вокруг одного понятного действия и удерживает внимание за счёт быстрого развития сцены.",
-                "metaphor": "Главный объект работает как визуальный центр истории, а движение подчёркивает переход от ожидания к действию.",
-                "target_action": "Заинтересовать зрителя и вызвать желание досмотреть ролик до конца.",
-                "strategic_task": "Виральность и удержание внимания.",
-            },
-            "story_dramaturgy": {
-                "genre": "Динамичный короткий визуальный ролик.",
-                "hero_arc": "Главный объект проходит от спокойного состояния к активному действию и финальному результату.",
-                "structure": {
-                    "exposition": "Показывается исходная ситуация и главный объект.",
-                    "incident": "Возникает действие, меняющее ритм и направление сцены.",
-                    "resolution": "Действие завершается визуальным акцентом.",
-                },
-                "context_overlay": "Экранный текст должен поддерживать действие и не перекрывать ключевые детали кадра.",
-            },
-            "sound_design": {
-                "music_score": "Средний или быстрый темп, музыка усиливает движение и смену сцен.",
-                "sfx": ["шаги или движения героя", "акцент перехода", "атмосферный фон"],
-                "the_drop": "Короткое снижение музыки перед главным визуальным акцентом.",
-                "sound_bridge": "Звук действия продолжается через монтажную склейку и связывает соседние кадры.",
-            },
-            "blocking_geometry": {
-                "composition": {
-                    "foreground": "Ключевой объект или деталь для глубины кадра.",
-                    "middleground": "Основное действие.",
-                    "background": "Среда, задающая контекст и атмосферу.",
-                },
-                "movement_vectors": "Движение героя строится по оси Z к камере и дополняется горизонтальным движением по X.",
-                "precise_actions": ["приближается", "резко останавливается", "разворачивается", "ускоряется"],
-            },
-            "cinematography_specs": {
-                "camera_state": "Динамичная камера с короткими dolly/pan движениями.",
-                "angle": "Преимущественно eye-level с отдельными low-angle акцентами.",
-                "optics_lens": "Умеренно широкий угол для ощущения присутствия и пространства.",
-                "focus_depth": "Главный объект отделён от фона умеренной глубиной резкости.",
-                "fps_speed": "Основной материал в стандартной скорости, акцентные моменты могут использовать slow motion.",
-            },
-            "art_direction": {
-                "palette": "Контрастная палитра с одним доминирующим цветовым акцентом.",
-                "visual_rhymes": "Повторяющиеся цвета и формы связывают разные сцены.",
-                "lighting": {
-                    "source": "Боковой и контровой свет для отделения объекта от фона.",
-                    "quality": "Мягкий основной свет с более жёсткими акцентами.",
-                },
-                "key_props": ["главный объект сцены", "деталь окружения", "визуальный акцент"],
-            },
-            "editing_psychology": {
-                "pacing_tempo": "Короткие кадры в начале и более длинный финальный кадр для фиксации результата.",
-                "hooks": {
-                    "start_3s": "Сразу показать движение, необычный объект или визуальный конфликт.",
-                    "middle_intrigue": "Добавить изменение направления или неожиданный визуальный элемент.",
-                    "end_reward": "Завершить ролик ясным результатом или сильным финальным кадром.",
-                },
-                "diegesis": "Переходы должны сохранять логику пространства и действия.",
-                "transitions_matchcuts": "Лучше использовать match-cut по движению, форме или направлению камеры.",
-                "emotional_curve": "Интерес → ожидание → ускорение → кульминация → короткое визуальное вознаграждение.",
-            },
-            "script_breakdown": [
-                {
-                    "timecode": "0:00–0:03",
-                    "action": "Появляется главный объект и сразу начинается действие.",
-                    "audio": "Стартовый музыкальный акцент и атмосферный звук.",
-                    "meaning": "Hook и постановка исходной ситуации.",
-                },
-                {
-                    "timecode": "0:03–0:10",
-                    "action": "Действие развивается, камера следует за объектом и меняет масштаб.",
-                    "audio": "Ритм усиливается, добавляются SFX движения.",
-                    "meaning": "Развитие интриги и удержание внимания.",
-                },
-                {
-                    "timecode": "0:10–0:15",
-                    "action": "Кульминационное действие и финальный визуальный акцент.",
-                    "audio": "Короткий drop и финальный удар музыки.",
-                    "meaning": "Вознаграждение зрителя и завершение истории.",
-                },
-            ],
-            "analytical_filter": {
-                "one_goal_principle": "Ролик должен держаться одной визуальной идеи без лишних параллельных сюжетов.",
-                "empathy_effort": "Эмоциональная связь усилится, если усилие героя видно физически, а не только заявлено текстом.",
-                "metaphor_logic": "Визуальная причина и следствие должны быть понятны без дополнительного объяснения.",
-                "cgi_honesty": "Уровень графики и композитинга должен соответствовать общей стилистике и амбиции ролика.",
-                "drop_off_point": "Риск потери внимания появляется, если после первых секунд действие перестаёт развиваться или реклама начинается слишком рано.",
-                "unity_of_focus": "В кадре должен оставаться один главный смысловой центр.",
-            },
-        },
-        "reproduction_prompt": "Create a cinematic short-form video with a clear single visual idea. Open with immediate action in the first three seconds, keep one main subject as the visual focus, use dynamic eye-level and occasional low-angle shots, moderate wide-angle optics, shallow-to-medium depth of field, lateral and forward camera movement, strong foreground/midground/background separation, directional side and rim lighting, a controlled contrast palette, rhythmic cuts with motion match-cuts, tactile sound effects, a short music drop before the climax, and a strong final visual reward. Preserve spatial logic and make every action precise, readable and physically motivated.",
-    }
+def video_path_for_task(task_id: str) -> Path:
+    with SessionLocal() as session:
+        task = session.get(PredictionTaskORM, task_id)
+        if task is None:
+            raise ValueError(f"task {task_id} not found")
+        if not task.source_name or "." not in task.source_name:
+            raise ValueError("video source name is missing")
+        suffix = task.source_name.rsplit(".", 1)[-1].lower()
+    return UPLOAD_DIR / f"{task_id}.{suffix}"
 
 
-def predict(features: dict[str, float], model: str) -> tuple[float | None, dict | None]:
+def predict(
+    features: dict[str, float],
+    model: str,
+    task_id: str,
+) -> tuple[float | None, dict | None]:
     if model == "demo_model":
         return sum(features.values()), None
     if model == "video_analysis":
-        return None, video_analysis_result()
+        video_path = video_path_for_task(task_id)
+        return None, analyze_video(str(video_path))
     raise ValueError("unknown model")
 
 
@@ -181,13 +106,22 @@ def save_failure_and_refund(task_id: str, error: str) -> None:
         task.prediction = None
         task.result = None
         task.worker_id = WORKER_ID
-        task.error = error
+        task.error = error[:500]
         task.processed_at = datetime.now(timezone.utc)
         session.commit()
 
 
+def cleanup_video(task_id: str) -> None:
+    try:
+        path = video_path_for_task(task_id)
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def handle_message(channel, method, _properties, body: bytes) -> None:
     task_id = "unknown"
+    model = None
     try:
         message = json.loads(body.decode("utf-8"))
         task_id = message["task_id"]
@@ -196,7 +130,7 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
         if not isinstance(model, str) or not model:
             raise ValueError("model must be a non-empty string")
 
-        prediction, result = predict(features, model)
+        prediction, result = predict(features, model, task_id)
         save_success(task_id, prediction, result)
         print(
             json.dumps(
@@ -251,6 +185,9 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
             )
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+    finally:
+        if task_id != "unknown" and model == "video_analysis":
+            cleanup_video(task_id)
 
 
 def main() -> None:
