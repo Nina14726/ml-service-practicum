@@ -6,6 +6,7 @@ services:
       - ./app/.env
     volumes:
       - ./app/src:/app/src
+      - video_uploads:/app/uploads
     expose:
       - "8000"
     depends_on:
@@ -22,6 +23,7 @@ services:
       WORKER_ID: worker-1
     volumes:
       - ./app/src:/app/src
+      - video_uploads:/app/uploads
     depends_on:
       - database
       - rabbitmq
@@ -36,6 +38,7 @@ services:
       WORKER_ID: worker-2
     volumes:
       - ./app/src:/app/src
+      - video_uploads:/app/uploads
     depends_on:
       - database
       - rabbitmq
@@ -68,3 +71,4 @@ services:
 volumes:
   postgres_volume:
   rabbitmq_volume:
+  video_uploads:
