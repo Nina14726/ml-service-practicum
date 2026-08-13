@@ -1,64 +1,26 @@
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from pathlib import Path
+
+from fastapi import APIRouter, Request
+from fastapi.responses import FileResponse
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter()
 
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+static_dir = BASE_DIR / "static"
 
-@router.get("/web", response_class=HTMLResponse)
-def web_app() -> str:
-    return r'''<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Video Analysis — личный кабинет</title>
-  <style>
-    :root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f5f7fb}
-    *{box-sizing:border-box} body{margin:0}.wrap{max-width:1120px;margin:auto;padding:24px}
-    header{background:#172033;color:white}.hero{padding:44px 24px}.hero h1{margin:0 0 10px;font-size:38px}.hero p{max-width:760px;color:#d8deec}
-    nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}button,.button{border:0;border-radius:10px;padding:11px 16px;background:#5b5bd6;color:white;cursor:pointer;font-weight:600}
-    button.secondary{background:#e7e9f4;color:#172033}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px;margin-top:22px}
-    .card{background:white;border-radius:16px;padding:20px;box-shadow:0 8px 30px #17203312}.card h2{margin-top:0}.card h3{margin:18px 0 8px}
-    input,textarea{width:100%;padding:11px;border:1px solid #ccd1df;border-radius:9px;margin:6px 0 12px;font:inherit}
-    .muted{color:#697386}.status{padding:12px;border-radius:9px;margin-top:12px;white-space:pre-wrap}.ok{background:#e8f7ee;color:#17663a}.err{background:#fdecec;color:#922}
-    table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:10px;border-bottom:1px solid #edf0f5;vertical-align:top}
-    .hidden{display:none}.balance{font-size:34px;font-weight:800}.wide{grid-column:1/-1}.upload{border:2px dashed #bcc5d8;border-radius:14px;padding:22px;background:#fafbfe}
-    .result-block{background:#f7f8fc;border-radius:12px;padding:16px;margin-top:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    .history-actions button{padding:7px 10px;font-size:12px}.mono{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
-  </style>
-</head>
-<body>
-<header><div class="wrap hero"><h1>Video Analysis</h1><p>Загрузите видео и получите полноценный режиссёрский разбор по методике Master Breakdown, сценарную таблицу по таймкодам и готовый промпт для создания похожего ролика.</p><nav><button onclick="show('home')">Главная</button><button onclick="show('account')">Аккаунт</button><button onclick="show('cabinet')">Личный кабинет</button><button onclick="show('history')">История</button><button onclick="logout()" class="secondary">Выйти</button></nav></div></header>
-<main class="wrap">
-<section id="home"><div class="grid"><article class="card"><h2>Что делает сервис</h2><p>Анализирует структуру видео: идею, драматургию, звук, композицию, движение, камеру, свет, цвет, монтаж, хуки и точки возможного drop-off.</p></article><article class="card"><h2>Что вы получите</h2><p>Подробный Master Breakdown, сценарный разбор по таймкодам, аналитический фильтр и готовый reproduction prompt для повторения стилистики ролика.</p></article></div></section>
-<section id="account" class="hidden"><div class="grid"><form class="card" onsubmit="registerUser(event)"><h2>Регистрация</h2><input id="regEmail" type="email" placeholder="Email" required><input id="regPassword" type="password" placeholder="Пароль" minlength="4" required><button>Создать аккаунт</button><div id="regStatus"></div></form><form class="card" onsubmit="loginUser(event)"><h2>Авторизация</h2><input id="loginEmail" type="email" placeholder="Email" required><input id="loginPassword" type="password" placeholder="Пароль" required><button>Войти</button><div id="loginStatus"></div></form></div></section>
-<section id="cabinet" class="hidden"><div class="grid"><article class="card"><h2>Баланс</h2><div id="balance" class="balance">—</div><button onclick="loadBalance()">Обновить</button></article><form class="card" onsubmit="topUp(event)"><h2>Пополнение</h2><input id="topupAmount" type="number" min="0.01" step="0.01" value="10" required><button>Пополнить</button><div id="topupStatus"></div></form><form class="card wide" onsubmit="sendVideoAnalysis(event)"><h2>Анализ видео</h2><div class="upload"><input id="videoFile" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required><p class="muted">MP4, MOV или WebM · до 100 МБ · до 1 минуты</p><div id="videoInfo" class="muted"></div></div><button style="margin-top:14px">Запустить анализ</button><div id="analysisStatus"></div></form><article id="resultCard" class="card wide hidden"><h2>Результат анализа</h2><div id="analysisResult"></div></article></div></section>
-<section id="history" class="hidden"><div class="grid"><article class="card wide"><h2>История анализов</h2><button onclick="loadTasks()">Обновить</button><div style="overflow:auto"><table><thead><tr><th>Дата</th><th>Видео</th><th>Статус</th><th>Списано</th><th>Воркер</th><th>Результат</th></tr></thead><tbody id="tasksBody"></tbody></table></div></article><article class="card wide"><h2>История транзакций</h2><button onclick="loadTransactions()">Обновить</button><div style="overflow:auto"><table><thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Request ID</th></tr></thead><tbody id="txBody"></tbody></table></div></article></div></section>
-</main>
-<script>
-const api=''; const token=()=>localStorage.getItem('ml_token'); let currentResult=null;
-function show(id){document.querySelectorAll('main>section').forEach(x=>x.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');if(id==='cabinet'){loadBalance()}if(id==='history'){loadTasks();loadTransactions()}}
-function box(id,msg,ok=true){document.getElementById(id).innerHTML=`<div class="status ${ok?'ok':'err'}">${msg}</div>`}
-async function req(path,opt={}){opt.headers={...(opt.headers||{}),'Content-Type':'application/json'};if(token())opt.headers.Authorization='Bearer '+token();const r=await fetch(api+path,opt);let data;try{data=await r.json()}catch{data={detail:await r.text()}}const msg=Array.isArray(data.detail)?data.detail.map(e=>`${(e.loc||[]).slice(1).join('.')}: ${e.msg}`).join('; '):(data.detail||JSON.stringify(data));if(!r.ok)throw new Error(msg);return data}
-async function registerUser(e){e.preventDefault();try{const d=await req('/auth/register',{method:'POST',body:JSON.stringify({email:regEmail.value,password:regPassword.value})});box('regStatus','Пользователь создан: '+d.email)}catch(x){box('regStatus',x.message,false)}}
-async function loginUser(e){e.preventDefault();try{const d=await req('/auth/login',{method:'POST',body:JSON.stringify({email:loginEmail.value,password:loginPassword.value})});localStorage.setItem('ml_token',d.access_token);box('loginStatus','Авторизация успешна');show('cabinet')}catch(x){box('loginStatus',x.message,false)}}
-function logout(){localStorage.removeItem('ml_token');show('account')}
-async function loadBalance(){try{const d=await req('/balance');document.getElementById('balance').textContent=d.amount+' кредитов'}catch(x){document.getElementById('balance').textContent='Нужна авторизация'}}
-async function topUp(e){e.preventDefault();try{const d=await req('/balance/top-up',{method:'POST',body:JSON.stringify({amount:Number(topupAmount.value)})});box('topupStatus','Новый баланс: '+d.amount);loadBalance();loadTransactions()}catch(x){box('topupStatus',x.message,false)}}
-function videoDuration(file){return new Promise((resolve,reject)=>{const v=document.createElement('video');v.preload='metadata';v.onloadedmetadata=()=>{URL.revokeObjectURL(v.src);resolve(v.duration)};v.onerror=()=>reject(new Error('Не удалось определить длительность видео'));v.src=URL.createObjectURL(file)})}
-videoFile.addEventListener('change',async()=>{const f=videoFile.files[0];if(!f){videoInfo.textContent='';return}try{const d=await videoDuration(f);videoInfo.textContent=`${f.name} · ${(f.size/1024/1024).toFixed(1)} МБ · ${d.toFixed(1)} сек`;}catch(x){videoInfo.textContent=x.message}})
-async function sendVideoAnalysis(e){e.preventDefault();const f=videoFile.files[0];if(!f){box('analysisStatus','Выберите видео',false);return}if(f.size>100*1024*1024){box('analysisStatus','Размер видео должен быть не больше 100 МБ',false);return}let duration;try{duration=await videoDuration(f)}catch(x){box('analysisStatus',x.message,false);return}if(duration>60){box('analysisStatus','Длительность видео должна быть не больше 1 минуты',false);return}try{const d=await req('/video-analysis',{method:'POST',body:JSON.stringify({filename:f.name,size_bytes:f.size,duration_seconds:duration})});box('analysisStatus','Видео принято. Анализ выполняется...');poll(d.task_id)}catch(x){box('analysisStatus',x.message,false)}}
-async function poll(id){for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,700));try{const d=await req('/predict/'+id);if(d.status!=='queued'){if(d.status==='success'){renderResult(d);box('analysisStatus','Анализ готов');loadBalance();loadTasks();loadTransactions()}else{box('analysisStatus',d.error||'Ошибка анализа',false)}return}}catch{}}box('analysisStatus','Анализ ещё выполняется',false)}
-function textAnalysis(r){const a=r.analysis;return `MASTER BREAKDOWN\n\nШаг 0. Концепция и месседж\nЛоглайн: ${a.core_idea_dna.logline}\nМетафора: ${a.core_idea_dna.metaphor}\nЦелевое действие: ${a.core_idea_dna.target_action}\nСтратегическая задача: ${a.core_idea_dna.strategic_task}\n\nШаг 1. Сюжет и драматургия\nЖанр: ${a.story_dramaturgy.genre}\nАрка героя: ${a.story_dramaturgy.hero_arc}\nЭкспозиция: ${a.story_dramaturgy.structure.exposition}\nИнцидент: ${a.story_dramaturgy.structure.incident}\nРазвязка: ${a.story_dramaturgy.structure.resolution}\nКонтекст: ${a.story_dramaturgy.context_overlay}\n\nШаг 2. Звук\nМузыка: ${a.sound_design.music_score}\nSFX: ${a.sound_design.sfx.join(', ')}\nThe Drop: ${a.sound_design.the_drop}\nЗвуковой мост: ${a.sound_design.sound_bridge}\n\nШаг 3. Хореография и геометрия\nПередний план: ${a.blocking_geometry.composition.foreground}\nСредний план: ${a.blocking_geometry.composition.middleground}\nЗадний план: ${a.blocking_geometry.composition.background}\nДвижение: ${a.blocking_geometry.movement_vectors}\nДействия: ${a.blocking_geometry.precise_actions.join(', ')}\n\nШаг 4. Технический стек\nКамера: ${a.cinematography_specs.camera_state}\nРакурс: ${a.cinematography_specs.angle}\nОптика: ${a.cinematography_specs.optics_lens}\nФокус: ${a.cinematography_specs.focus_depth}\nFPS: ${a.cinematography_specs.fps_speed}\n\nШаг 5. Арт-дирекшн\nПалитра: ${a.art_direction.palette}\nВизуальные рифмы: ${a.art_direction.visual_rhymes}\nСвет: ${a.art_direction.lighting.source}; ${a.art_direction.lighting.quality}\nРеквизит: ${a.art_direction.key_props.join(', ')}\n\nШаг 6. Монтаж\nТемп: ${a.editing_psychology.pacing_tempo}\nХук: ${a.editing_psychology.hooks.start_3s}\nИнтрига: ${a.editing_psychology.hooks.middle_intrigue}\nФинал: ${a.editing_psychology.hooks.end_reward}\nДиегезис: ${a.editing_psychology.diegesis}\nСклейки: ${a.editing_psychology.transitions_matchcuts}\nЭмоциональная кривая: ${a.editing_psychology.emotional_curve}\n\nАналитический фильтр\nОдна цель: ${a.analytical_filter.one_goal_principle}\nЭмпатия: ${a.analytical_filter.empathy_effort}\nЛогика метафоры: ${a.analytical_filter.metaphor_logic}\nЧестность CGI: ${a.analytical_filter.cgi_honesty}\nDrop-off: ${a.analytical_filter.drop_off_point}\nЕдинство фокуса: ${a.analytical_filter.unity_of_focus}`}
-function scriptTable(items){return `<table><thead><tr><th>Таймкод</th><th>Сцена / действие</th><th>Текст / звук</th><th>Смысл</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.timecode}</td><td>${x.action}</td><td>${x.audio}</td><td>${x.meaning}</td></tr>`).join('')}</tbody></table>`}
-function renderResult(task){currentResult=task;const r=task.result;resultCard.classList.remove('hidden');analysisResult.innerHTML=`<div class="result-block"><h3>Master Breakdown</h3><div class="mono">${textAnalysis(r)}</div><h3>Script Breakdown</h3>${scriptTable(r.analysis.script_breakdown)}<div class="actions"><button onclick="copyAnalysis()">Копировать анализ</button><button onclick="downloadMd()">Скачать MD</button><button onclick="downloadPdf()">Скачать PDF</button></div></div><div class="result-block"><h3>Промпт для создания похожего видео</h3><div class="mono">${r.reproduction_prompt}</div><div class="actions"><button onclick="copyPrompt()">Копировать промпт</button></div></div>`;window.scrollTo({top:resultCard.offsetTop-20,behavior:'smooth'})}
-async function copyAnalysis(){if(!currentResult)return;await navigator.clipboard.writeText(textAnalysis(currentResult.result));}
-async function copyPrompt(){if(!currentResult)return;await navigator.clipboard.writeText(currentResult.result.reproduction_prompt);}
-function mdText(){const r=currentResult.result;let s=`# Master Breakdown\n\n${textAnalysis(r)}\n\n## Script Breakdown\n\n| Таймкод | Сцена / действие | Текст / звук | Смысл |\n|---|---|---|---|\n`;for(const x of r.analysis.script_breakdown)s+=`| ${x.timecode} | ${x.action} | ${x.audio} | ${x.meaning} |\n`;s+=`\n## Промпт для создания похожего видео\n\n${r.reproduction_prompt}\n`;return s}
-function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
-function downloadMd(){if(currentResult)download('video-analysis.md',mdText(),'text/markdown;charset=utf-8')}
-function downloadPdf(){if(!currentResult)return;const w=window.open('','_blank');w.document.write(`<html><head><meta charset="utf-8"><title>Video Analysis</title><style>body{font-family:Arial,sans-serif;padding:32px;line-height:1.5}pre{white-space:pre-wrap}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px;text-align:left}</style></head><body><h1>Master Breakdown</h1><pre>${textAnalysis(currentResult.result)}</pre><h2>Script Breakdown</h2>${scriptTable(currentResult.result.analysis.script_breakdown)}<h2>Промпт для создания похожего видео</h2><pre>${currentResult.result.reproduction_prompt}</pre></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),200)}
-async function openTask(id){try{const d=await req('/predict/'+id);if(!d.result){alert('Для этой задачи нет сохранённого анализа');return}renderResult(d);show('cabinet')}catch(x){alert(x.message)}}
-async function loadTasks(){try{const d=await req('/web/api/tasks');const items=d.filter(x=>x.model==='video_analysis');tasksBody.innerHTML=items.length?items.map(x=>`<tr><td>${x.created_at}</td><td>${x.source_name??'Видео'}</td><td>${x.status}</td><td>${x.charged_credits}</td><td>${x.worker_id??''}</td><td class="history-actions">${x.result?`<button onclick="openTask('${x.task_id}')">Открыть</button>`:(x.error??'')}</td></tr>`).join(''):`<tr><td colspan="6">Анализов пока нет</td></tr>`}catch(x){tasksBody.innerHTML=`<tr><td colspan="6">${x.message}</td></tr>`}}
-async function loadTransactions(){try{const d=await req('/history/transactions');txBody.innerHTML=d.map(x=>`<tr><td>${x.created_at}</td><td>${x.transaction_type}</td><td>${x.amount}</td><td>${x.request_id??''}</td></tr>`).join('')}catch(x){txBody.innerHTML=`<tr><td colspan="4">${x.message}</td></tr>`}}
-</script></body></html>'''
+
+@router.get("/web")
+def web_app(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@router.get("/web/static/style.css", include_in_schema=False)
+def web_styles() -> FileResponse:
+    return FileResponse(static_dir / "style.css", media_type="text/css")
+
+
+@router.get("/web/static/app.js", include_in_schema=False)
+def web_scripts() -> FileResponse:
+    return FileResponse(static_dir / "app.js", media_type="application/javascript")
