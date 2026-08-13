@@ -52,16 +52,11 @@ def predict(
     if model == "demo_model":
         return sum(features.values()), None
     if model == "video_analysis":
-        video_path = video_path_for_task(task_id)
-        return None, analyze_video(str(video_path))
+        return None, analyze_video(str(video_path_for_task(task_id)))
     raise ValueError("unknown model")
 
 
-def save_success(
-    task_id: str,
-    prediction: float | None,
-    result: dict | None,
-) -> None:
+def save_success(task_id: str, prediction: float | None, result: dict | None) -> None:
     with SessionLocal() as session:
         task = session.get(PredictionTaskORM, task_id)
         if task is None:
@@ -113,8 +108,7 @@ def save_failure_and_refund(task_id: str, error: str) -> None:
 
 def cleanup_video(task_id: str) -> None:
     try:
-        path = video_path_for_task(task_id)
-        path.unlink(missing_ok=True)
+        video_path_for_task(task_id).unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -122,6 +116,7 @@ def cleanup_video(task_id: str) -> None:
 def handle_message(channel, method, _properties, body: bytes) -> None:
     task_id = "unknown"
     model = None
+    should_cleanup = False
     try:
         message = json.loads(body.decode("utf-8"))
         task_id = message["task_id"]
@@ -143,6 +138,7 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
             )
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+        should_cleanup = True
     except Exception as error:
         if task_id == "unknown":
             print(
@@ -185,8 +181,9 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
             )
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+        should_cleanup = True
     finally:
-        if task_id != "unknown" and model == "video_analysis":
+        if should_cleanup and model == "video_analysis":
             cleanup_video(task_id)
 
 
