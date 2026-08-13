@@ -10,7 +10,7 @@ from src.rabbitmq import publish_task
 from src.schemas import AsyncPredictionAccepted
 
 
-def enqueue_task(*, session: Session, user: UserORM, model_name: str, features: dict, source_name: str | None = None, source_size: int | None = None, source_duration: float | None = None) -> AsyncPredictionAccepted:
+def enqueue_task(*, session: Session, user: UserORM, model_name: str, features: dict, source_name: str | None = None, source_size: int | None = None, source_duration: float | None = None, task_id: str | None = None) -> AsyncPredictionAccepted:
     model = session.scalar(select(MLModelORM).where(MLModelORM.name == model_name))
     if model is None:
         raise HTTPException(status_code=404, detail="ML model not found")
@@ -20,7 +20,7 @@ def enqueue_task(*, session: Session, user: UserORM, model_name: str, features: 
     if balance.amount < model.prediction_cost:
         raise HTTPException(status_code=402, detail="Insufficient balance")
 
-    task_id = str(uuid4())
+    task_id = task_id or str(uuid4())
     created_at = datetime.now(timezone.utc)
     balance.amount -= model.prediction_cost
     task = PredictionTaskORM(task_id=task_id, user_id=user.id, features=features, model=model_name, charged_credits=model.prediction_cost, source_name=source_name, source_size=source_size, source_duration=source_duration, status="queued", created_at=created_at)
