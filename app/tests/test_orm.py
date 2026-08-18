@@ -187,6 +187,6 @@ def test_demo_initialization_is_idempotent(session: Session) -> None:
     models = list(session.scalars(select(MLModelORM)))
 
     assert len(users) == 2
-    assert len(models) == 2
+    assert len(models) == 4
     assert {user.role for user in users} == {"user", "admin"}
     assert all(user.balance is not None for user in users)
