@@ -1,0 +1,15 @@
+:root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f5f7fb}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:1120px;margin:auto;padding:24px}
+header{background:#172033;color:white}.hero{padding:44px 24px}.hero h1{margin:0 0 10px;font-size:38px}.hero p{max-width:760px;color:#d8deec}
+nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}button,.button{border:0;border-radius:10px;padding:11px 16px;background:#5b5bd6;color:white;cursor:pointer;font-weight:600}button.secondary{background:#e7e9f4;color:#172033}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px;margin-top:22px}.card{background:white;border-radius:16px;padding:20px;box-shadow:0 8px 30px #17203312}.card h2{margin-top:0}.card h3{margin:18px 0 8px}
+input,textarea{width:100%;padding:11px;border:1px solid #ccd1df;border-radius:9px;margin:6px 0 12px;font:inherit}.muted{color:#697386}.status{padding:12px;border-radius:9px;margin-top:12px;white-space:pre-wrap}.ok{background:#e8f7ee;color:#17663a}.err{background:#fdecec;color:#922}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:10px;border-bottom:1px solid #edf0f5;vertical-align:top}.hidden{display:none}.balance{font-size:34px;font-weight:800}.wide{grid-column:1/-1}.upload{border:2px dashed #bcc5d8;border-radius:14px;padding:22px;background:#fafbfe}
+.result-block{background:#f7f8fc;border-radius:12px;padding:16px;margin-top:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.history-actions button{padding:7px 10px;font-size:12px}.mono{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}.analysis-button{margin-top:14px}.table-wrap{overflow:auto}
+@media(max-width:640px){
+.wrap{padding:16px}.hero{padding:30px 16px}.hero h1{font-size:32px}.card{padding:16px}.grid{grid-template-columns:1fr}
+.table-wrap{overflow:visible;margin-top:12px}.table-wrap table,.table-wrap tbody,.table-wrap tr,.table-wrap td{display:block;width:100%}.table-wrap thead{display:none}.table-wrap tr{border:1px solid #edf0f5;border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}.table-wrap td{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:7px 0;border:0;overflow-wrap:anywhere}.table-wrap td::before{font-weight:700;color:#697386}
+#tasksBody td:nth-child(1)::before{content:'Дата'}#tasksBody td:nth-child(2)::before{content:'Видео'}#tasksBody td:nth-child(3)::before{content:'Статус'}#tasksBody td:nth-child(4)::before{content:'Списано'}#tasksBody td:nth-child(5)::before{content:'Воркер'}#tasksBody td:nth-child(6)::before{content:'Результат'}
+#txBody td:nth-child(1)::before{content:'Дата'}#txBody td:nth-child(2)::before{content:'Тип'}#txBody td:nth-child(3)::before{content:'Сумма'}#txBody td:nth-child(4)::before{content:'Request ID'}
+.history-actions button{width:100%;font-size:14px;padding:10px 12px}
+}

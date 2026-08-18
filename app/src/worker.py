@@ -1,15 +1,18 @@
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pika
 from sqlalchemy import select
 
 from src.database import SessionLocal, create_tables, wait_for_database
+from src.gemini_analysis import analyze_video
 from src.models import BalanceORM, PredictionTaskORM, TransactionORM
 from src.rabbitmq import QUEUE_NAME, connect_to_rabbitmq
 
 WORKER_ID = os.getenv("WORKER_ID", "worker-unknown")
+UPLOAD_DIR = Path(os.getenv("VIDEO_UPLOAD_DIR", "/app/uploads"))
 
 
 def validate_features(features: object) -> dict[str, float]:
@@ -30,19 +33,37 @@ def validate_features(features: object) -> dict[str, float]:
     return result
 
 
-def predict(features: dict[str, float], model: str) -> float:
-    if model != "demo_model":
-        raise ValueError("unknown model")
-    return sum(features.values())
+def video_path_for_task(task_id: str) -> Path:
+    with SessionLocal() as session:
+        task = session.get(PredictionTaskORM, task_id)
+        if task is None:
+            raise ValueError(f"task {task_id} not found")
+        if not task.source_name or "." not in task.source_name:
+            raise ValueError("video source name is missing")
+        suffix = task.source_name.rsplit(".", 1)[-1].lower()
+    return UPLOAD_DIR / f"{task_id}.{suffix}"
 
 
-def save_success(task_id: str, prediction: float) -> None:
+def predict(
+    features: dict[str, float],
+    model: str,
+    task_id: str,
+) -> tuple[float | None, dict | None]:
+    if model == "demo_model":
+        return sum(features.values()), None
+    if model == "video_analysis":
+        return None, analyze_video(str(video_path_for_task(task_id)))
+    raise ValueError("unknown model")
+
+
+def save_success(task_id: str, prediction: float | None, result: dict | None) -> None:
     with SessionLocal() as session:
         task = session.get(PredictionTaskORM, task_id)
         if task is None:
             raise ValueError(f"task {task_id} not found")
         task.status = "success"
         task.prediction = prediction
+        task.result = result
         task.worker_id = WORKER_ID
         task.error = None
         task.processed_at = datetime.now(timezone.utc)
@@ -78,14 +99,24 @@ def save_failure_and_refund(task_id: str, error: str) -> None:
 
         task.status = "failed"
         task.prediction = None
+        task.result = None
         task.worker_id = WORKER_ID
-        task.error = error
+        task.error = error[:500]
         task.processed_at = datetime.now(timezone.utc)
         session.commit()
 
 
+def cleanup_video(task_id: str) -> None:
+    try:
+        video_path_for_task(task_id).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def handle_message(channel, method, _properties, body: bytes) -> None:
     task_id = "unknown"
+    model = None
+    should_cleanup = False
     try:
         message = json.loads(body.decode("utf-8"))
         task_id = message["task_id"]
@@ -94,8 +125,8 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
         if not isinstance(model, str) or not model:
             raise ValueError("model must be a non-empty string")
 
-        prediction = predict(features, model)
-        save_success(task_id, prediction)
+        prediction, result = predict(features, model, task_id)
+        save_success(task_id, prediction, result)
         print(
             json.dumps(
                 {
@@ -107,6 +138,7 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
             )
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+        should_cleanup = True
     except Exception as error:
         if task_id == "unknown":
             print(
@@ -149,6 +181,10 @@ def handle_message(channel, method, _properties, body: bytes) -> None:
             )
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+        should_cleanup = True
+    finally:
+        if should_cleanup and model == "video_analysis":
+            cleanup_video(task_id)
 
 
 def main() -> None:

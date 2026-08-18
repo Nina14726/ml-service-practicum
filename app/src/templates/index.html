@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Video Analysis — личный кабинет{% endblock %}
+{% block content %}
+<header>
+  <div class="wrap hero">
+    <h1>Video Analysis</h1>
+    <p>Загрузите видео и получите полноценный режиссёрский разбор по методике Master Breakdown, сценарную таблицу по таймкодам и готовый промпт для создания похожего ролика.</p>
+    <nav>
+      <button onclick="show('home')">Главная</button>
+      <button id="accountNav" onclick="show('account')">Войти / регистрация</button>
+      <button id="cabinetNav" class="hidden" onclick="show('cabinet')">Личный кабинет</button>
+      <button id="historyNav" class="hidden" onclick="show('history')">История</button>
+      <button id="logoutNav" onclick="logout()" class="secondary hidden">Выйти</button>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <section id="home">
+    <div class="grid">
+      <article class="card">
+        <h2>Что делает сервис</h2>
+        <p>Анализирует структуру видео: идею, драматургию, звук, композицию, движение, камеру, свет, цвет, монтаж, хуки и точки возможного drop-off.</p>
+      </article>
+      <article class="card">
+        <h2>Что вы получите</h2>
+        <p>Подробный Master Breakdown, сценарный разбор по таймкодам, аналитический фильтр и готовый reproduction prompt для повторения стилистики ролика.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="account" class="hidden">
+    <div class="grid">
+      <form class="card" onsubmit="registerUser(event)">
+        <h2>Регистрация</h2>
+        <input id="regEmail" type="email" placeholder="Email" required>
+        <input id="regPassword" type="password" placeholder="Пароль" minlength="4" required>
+        <button>Создать аккаунт</button>
+        <div id="regStatus"></div>
+      </form>
+      <form class="card" onsubmit="loginUser(event)">
+        <h2>Авторизация</h2>
+        <input id="loginEmail" type="email" placeholder="Email" required>
+        <input id="loginPassword" type="password" placeholder="Пароль" required>
+        <button>Войти</button>
+        <div id="loginStatus"></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="cabinet" class="hidden">
+    <div class="grid">
+      <article class="card">
+        <h2>Баланс</h2>
+        <div id="balance" class="balance">—</div>
+        <button onclick="loadBalance()">Обновить баланс</button>
+      </article>
+      <form class="card" onsubmit="topUp(event)">
+        <h2>Пополнение</h2>
+        <p class="muted">Учебные кредиты, не доллары. Реальной оплаты нет. Один анализ видео стоит 5 кредитов.</p>
+        <label for="topupAmount">Количество кредитов</label>
+        <input id="topupAmount" type="number" min="0.01" step="0.01" value="10" required>
+        <button>Пополнить баланс</button>
+        <div id="topupStatus"></div>
+      </form>
+      <form class="card wide" onsubmit="sendVideoAnalysis(event)">
+        <h2>Анализ видео</h2>
+        <p class="muted">Стоимость одного анализа: 5 кредитов.</p>
+        <div class="upload">
+          <input id="videoFile" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required>
+          <p class="muted">MP4, MOV или WebM · до 100 МБ · до 1 минуты</p>
+          <div id="videoInfo" class="muted"></div>
+        </div>
+        <button class="analysis-button">Запустить анализ</button>
+        <div id="analysisStatus"></div>
+      </form>
+      <article id="resultCard" class="card wide hidden">
+        <h2>Результат анализа</h2>
+        <div id="analysisResult"></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="history" class="hidden">
+    <div class="grid">
+      <article class="card wide">
+        <h2>История анализов</h2>
+        <button onclick="loadTasks()">Обновить</button>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Дата</th><th>Видео</th><th>Статус</th><th>Списано</th><th>Воркер</th><th>Результат</th></tr></thead>
+            <tbody id="tasksBody"></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="card wide">
+        <h2>История транзакций</h2>
+        <button onclick="loadTransactions()">Обновить</button>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Request ID</th></tr></thead>
+            <tbody id="txBody"></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}

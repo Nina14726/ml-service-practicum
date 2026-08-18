@@ -55,6 +55,12 @@ class AsyncPredictionRequest(BaseModel):
     model: str = Field(min_length=1)
 
 
+class VideoAnalysisRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size_bytes: int = Field(gt=0, le=100 * 1024 * 1024)
+    duration_seconds: float = Field(gt=0, le=60)
+
+
 class AsyncPredictionAccepted(BaseModel):
     task_id: str
     status: str
@@ -68,6 +74,10 @@ class AsyncPredictionResult(BaseModel):
     model: str
     charged_credits: Decimal
     prediction: float | None
+    result: dict | None = None
+    source_name: str | None = None
+    source_size: int | None = None
+    source_duration: float | None = None
     worker_id: str | None
     status: str
     error: str | None
