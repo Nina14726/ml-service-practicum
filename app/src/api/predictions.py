@@ -21,6 +21,7 @@ VIDEO_TYPES = {
     "mov": {"video/quicktime", "video/mov"},
     "webm": {"video/webm"},
 }
+GENERIC_UPLOAD_TYPES = {"application/octet-stream"}
 
 
 @router.post("/predict", response_model=AsyncPredictionAccepted, status_code=202)
@@ -39,7 +40,7 @@ async def enqueue_video_analysis(
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if suffix not in VIDEO_TYPES:
         raise HTTPException(status_code=400, detail="Supported video formats: MP4, MOV, WebM")
-    if video.content_type and video.content_type not in VIDEO_TYPES[suffix]:
+    if video.content_type and video.content_type not in VIDEO_TYPES[suffix] | GENERIC_UPLOAD_TYPES:
         raise HTTPException(status_code=400, detail="Video MIME type does not match the file format")
 
     task_id = str(uuid4())
