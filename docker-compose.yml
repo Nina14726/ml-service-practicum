@@ -17,6 +17,7 @@ services:
     build:
       context: ./app
     command: python -m src.worker
+    restart: unless-stopped
     env_file:
       - ./app/.env
     environment:
@@ -32,6 +33,7 @@ services:
     build:
       context: ./app
     command: python -m src.worker
+    restart: unless-stopped
     env_file:
       - ./app/.env
     environment:
