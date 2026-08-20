@@ -18,10 +18,11 @@
 - reproduction prompt для создания похожего видео;
 - история анализов и транзакций;
 - выгрузка результата в MD/PDF;
-- Prometheus-метрики;
+- Prometheus-метрики приложения и RabbitMQ;
 - готовый Grafana dashboard;
 - application logging;
-- pytest и GitHub Actions.
+- pytest и GitHub Actions;
+- лёгкий HTTP load test без дополнительных зависимостей.
 
 ## Архитектура
 
@@ -38,7 +39,9 @@ worker-1 / worker-2
   |
 Gemini API
 
-FastAPI /metrics --> Prometheus --> Grafana
+FastAPI /metrics ---------\
+                          Prometheus --> Grafana
+RabbitMQ :15692/metrics --/
 ```
 
 Основные Docker Compose сервисы:
@@ -105,7 +108,7 @@ http://localhost:3000
 
 Логин Grafana по умолчанию: `admin`. Пароль берётся из `GRAFANA_ADMIN_PASSWORD`, если переменная не задана — `admin`.
 
-Prometheus работает внутри Docker-сети и собирает метрики FastAPI с `/metrics`.
+Prometheus работает внутри Docker-сети и собирает метрики FastAPI и RabbitMQ.
 
 ## Мониторинг
 
@@ -119,7 +122,9 @@ FastAPI публикует технические и бизнес-метрики
 - `ml_service_prediction_tasks_total{status=...}` — асинхронные задачи по статусам;
 - `ml_service_transactions_total{type=...}` — credit/debit/refund операции.
 
-Grafana автоматически получает Prometheus datasource и dashboard `ML Service Monitoring` с основными панелями: пользователи, успешные анализы, RPS, p95 latency, HTTP errors и транзакции.
+RabbitMQ публикует встроенные Prometheus-метрики на порту `15692`. Prometheus собирает как общие метрики брокера, так и метрики очередей: количество ожидающих и неподтверждённых сообщений, общую глубину очереди и количество consumers.
+
+Grafana автоматически получает Prometheus datasource и dashboard `ML Service Monitoring` с панелями приложения и RabbitMQ: пользователи, успешные анализы, RPS, p95 latency, HTTP errors, транзакции, состояние RabbitMQ, consumers и сообщения в очередях.
 
 Prometheus хранит метрики 7 дней в отдельном Docker volume.
 
@@ -149,6 +154,18 @@ pytest
 Тесты покрывают пользовательские сценарии регистрации, авторизации, баланса, списаний, ML-запросов, истории и worker/refund. Для тестового набора реальный `GEMINI_API_KEY` не требуется.
 
 GitHub Actions автоматически запускает pytest для изменений в репозитории.
+
+### Нагрузочное тестирование
+
+В репозитории есть небольшой HTTP load test на стандартной библиотеке Python. По умолчанию он проверяет `/health`, поэтому не создаёт ML-задачи и не расходует кредиты или API-запросы.
+
+Пример запуска 100 запросов с параллельностью 10:
+
+```bash
+python3 scripts/load_test.py http://localhost --requests 100 --concurrency 10
+```
+
+Скрипт выводит количество успешных и ошибочных запросов, throughput в запросах в секунду, среднюю, p95 и максимальную latency, а также распределение HTTP-статусов.
 
 ## Остановка
 
