@@ -18,6 +18,20 @@
       "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
     },
     {
+      "type": "stat",
+      "title": "RabbitMQ up",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "up{job=\"rabbitmq\"}", "refId": "A"}],
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "RabbitMQ consumers",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum(rabbitmq_detailed_queue_consumers)", "refId": "A"}],
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+    },
+    {
       "type": "timeseries",
       "title": "HTTP requests / second",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
@@ -44,10 +58,27 @@
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [{"expr": "ml_service_transactions_total", "legendFormat": "{{type}}", "refId": "A"}],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}
+    },
+    {
+      "type": "timeseries",
+      "title": "RabbitMQ queue messages",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "sum(rabbitmq_detailed_queue_messages_ready)", "legendFormat": "ready", "refId": "A"},
+        {"expr": "sum(rabbitmq_detailed_queue_messages_unacked)", "legendFormat": "unacked", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22}
+    },
+    {
+      "type": "stat",
+      "title": "RabbitMQ total queued",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum(rabbitmq_detailed_queue_messages)", "refId": "A"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22}
     }
   ],
   "schemaVersion": 39,
-  "tags": ["ml-service", "monitoring"],
+  "tags": ["ml-service", "monitoring", "rabbitmq"],
   "templating": {
     "list": [
       {
@@ -63,5 +94,5 @@
   "timezone": "browser",
   "title": "ML Service Monitoring",
   "uid": "ml-service-monitoring",
-  "version": 1
+  "version": 2
 }
