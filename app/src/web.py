@@ -34,3 +34,8 @@ def auth_ui_scripts() -> FileResponse:
 @router.get("/web/static/clipboard.js", include_in_schema=False)
 def clipboard_scripts() -> FileResponse:
     return FileResponse(static_dir / "clipboard.js", media_type="application/javascript")
+
+
+@router.get("/web/static/history-ui.js", include_in_schema=False)
+def history_ui_scripts() -> FileResponse:
+    return FileResponse(static_dir / "history-ui.js", media_type="application/javascript")
